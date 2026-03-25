@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUSCLE ORCHESTRA</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; }
+
+/* Title Screen */
+#title-screen {
+  position: fixed; inset: 0; z-index: 100;
+  background: #0a0a0f;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: opacity 0.5s;
+}
+#title-screen h1 {
+  font-size: 4rem; letter-spacing: 0.3em;
+  background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #ff6b6b);
+  background-size: 300% 300%;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: gradient-shift 3s ease infinite;
+}
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+#title-screen p { margin-top: 1rem; font-size: 1.1rem; color: #888; max-width: 500px; text-align: center; line-height: 1.6; }
+#title-screen .subtitle { color: #ff6b6b; font-size: 0.9rem; margin-top: 2rem; }
+#start-btn {
+  margin-top: 2rem; padding: 1rem 3rem;
+  background: none; border: 2px solid #4d96ff; color: #4d96ff;
+  font-family: inherit; font-size: 1.2rem; cursor: pointer;
+  transition: all 0.2s; letter-spacing: 0.1em;
+}
+#start-btn:hover { background: #4d96ff; color: #0a0a0f; }
+
+/* Loading Screen */
+#loading-screen {
+  position: fixed; inset: 0; z-index: 99;
+  background: #0a0a0f;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+}
+#loading-screen p { font-size: 1.2rem; color: #888; }
+#loading-bar { width: 300px; height: 4px; background: #222; margin-top: 1rem; border-radius: 2px; }
+#loading-fill { height: 100%; width: 0%; background: #4d96ff; border-radius: 2px; transition: width 0.3s; }
+
+/* Game Layout */
+#game { display: none; width: 100vw; height: 100vh; position: relative; }
+
+/* Video feed */
+#camera-container {
+  position: absolute; top: 0; left: 0; width: 45%; height: 100%;
+  overflow: hidden; background: #111;
+}
+#webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+#face-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+/* Muscle meters overlay */
+#muscle-meters {
+  position: absolute; top: 10px; left: 10px; right: 10px;
+  display: flex; flex-wrap: wrap; gap: 3px; pointer-events: none;
+}
+.muscle-meter {
+  width: 60px; height: 6px; background: rgba(0,0,0,0.6);
+  border-radius: 3px; overflow: hidden; position: relative;
+}
+.muscle-meter-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 50ms; }
+.muscle-meter-label {
+  position: absolute; top: -14px; left: 0;
+  font-size: 7px; color: rgba(255,255,255,0.5); white-space: nowrap;
+}
+
+/* Right panel: note highway + instruments */
+#right-panel {
+  position: absolute; top: 0; right: 0; width: 55%; height: 100%;
+  display: flex; flex-direction: column;
+}
+
+/* Mode selector */
+#mode-bar {
+  height: 50px; display: flex; align-items: center; justify-content: center;
+  gap: 1rem; background: #111; border-bottom: 1px solid #222;
+}
+.mode-btn {
+  padding: 0.4rem 1.2rem; background: none; border: 1px solid #333;
+  color: #888; font-family: inherit; font-size: 0.8rem; cursor: pointer;
+  transition: all 0.2s; letter-spacing: 0.05em;
+}
+.mode-btn.active { border-color: #4d96ff; color: #4d96ff; }
+.mode-btn:hover { border-color: #4d96ff; color: #4d96ff; }
+
+/* Score display */
+#score-display {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 2rem; color: #ffd93d; z-index: 10;
+  text-shadow: 0 0 20px rgba(255,217,61,0.3);
+}
+#combo-display {
+  position: absolute; top: 50px; right: 10px;
+  font-size: 1rem; color: #6bcb77; z-index: 10;
+}
+
+/* Note highway */
+#highway {
+  flex: 1; position: relative; overflow: hidden; background: #0d0d14;
+}
+#highway canvas { width: 100%; height: 100%; }
+
+/* Active instruments panel */
+#instruments-panel {
+  height: 120px; background: #111; border-top: 1px solid #222;
+  display: flex; align-items: stretch; padding: 0;
+}
+.instrument-lane {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  border-right: 1px solid #1a1a1a;
+  transition: background 0.1s;
+  position: relative;
+}
+.instrument-lane:last-child { border-right: none; }
+.instrument-lane.active { background: rgba(255,255,255,0.05); }
+.instrument-lane .emoji { font-size: 2rem; }
+.instrument-lane .name { font-size: 0.6rem; color: #666; margin-top: 4px; letter-spacing: 0.05em; }
+.instrument-lane .muscle-name { font-size: 0.55rem; color: #444; margin-top: 2px; }
+.hit-zone {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
+  background: transparent; transition: background 0.1s;
+}
+.hit-zone.hit { background: #6bcb77; box-shadow: 0 0 20px rgba(107,203,119,0.5); }
+.hit-zone.miss { background: #ff6b6b; }
+
+/* Hit feedback */
+.hit-feedback {
+  position: absolute; font-size: 1.5rem; font-weight: bold;
+  pointer-events: none; animation: float-up 0.8s ease-out forwards;
+  z-index: 20;
+}
+@keyframes float-up {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1.3); }
+}
+
+/* Song select overlay */
+#song-select {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(10,10,15,0.95);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+}
+#song-select h2 { font-size: 2rem; color: #4d96ff; margin-bottom: 2rem; }
+.song-card {
+  width: 400px; padding: 1rem 1.5rem; margin: 0.5rem 0;
+  background: #151520; border: 1px solid #222; cursor: pointer;
+  transition: all 0.2s;
+}
+.song-card:hover { border-color: #4d96ff; background: #1a1a2a; }
+.song-card .song-title { font-size: 1.1rem; color: #e0e0e0; }
+.song-card .song-info { font-size: 0.75rem; color: #666; margin-top: 4px; }
+.song-card .difficulty { display: inline-block; padding: 2px 8px; font-size: 0.65rem; border-radius: 3px; margin-left: 8px; }
+.diff-easy { background: #1a3a1a; color: #6bcb77; }
+.diff-med { background: #3a3a1a; color: #ffd93d; }
+.diff-hard { background: #3a1a1a; color: #ff6b6b; }
+
+/* Results overlay */
+#results-screen {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(10,10,15,0.95);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+}
+#results-screen h2 { font-size: 3rem; color: #ffd93d; margin-bottom: 1rem; }
+#results-screen .stat { font-size: 1.2rem; color: #888; margin: 0.3rem 0; }
+#results-screen .stat span { color: #e0e0e0; }
+#results-screen .grade { font-size: 6rem; margin: 1rem 0; }
+
+/* Free play info */
+#freeplay-info {
+  position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.7); padding: 0.5rem 1.5rem; border-radius: 4px;
+  font-size: 0.8rem; color: #666; display: none; z-index: 5;
+}
+</style>
+</head>
+<body>
+
+<!-- Title Screen -->
+<div id="title-screen">
+  <h1>MUSCLE ORCHESTRA</h1>
+  <p>Your face is a 52-channel instrument. Raise an eyebrow to play violin. Puff your cheeks for bass. Smile for piano. Every facial muscle makes a different sound.</p>
+  <p class="subtitle">Requires webcam. Uses MediaPipe Face Blendshapes (on-device, no data sent anywhere).</p>
+  <button id="start-btn" onclick="startGame()">TUNE UP</button>
+</div>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+  <p id="loading-text">Loading face model...</p>
+  <div id="loading-bar"><div id="loading-fill"></div></div>
+</div>
+
+<!-- Song Select -->
+<div id="song-select"></div>
+
+<!-- Results -->
+<div id="results-screen"></div>
+
+<!-- Game -->
+<div id="game">
+  <div id="camera-container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="face-overlay"></canvas>
+    <div id="muscle-meters"></div>
+  </div>
+  <div id="right-panel">
+    <div id="mode-bar">
+      <button class="mode-btn active" onclick="setMode('freeplay')">FREE PLAY</button>
+      <button class="mode-btn" onclick="setMode('song')">SONGS</button>
+    </div>
+    <div style="position:relative;flex:1;display:flex;flex-direction:column;">
+      <div id="score-display" style="display:none;">0</div>
+      <div id="combo-display" style="display:none;"></div>
+      <canvas id="highway"></canvas>
+      <div id="freeplay-info">Move your face to make music. Each muscle triggers a different instrument.</div>
+      <div id="instruments-panel"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs";
+
+// ============================================================
+// INSTRUMENT DEFINITIONS
+// Each maps a blendshape to an instrument with specific sound
+// ============================================================
+const INSTRUMENTS = [
+  { muscle: 'browInnerUp',      name: 'Synth Bass',  emoji: '🎹', color: '#ff6b6b', type: 'synth',  freq: 110,  wave: 'sawtooth', threshold: 0.35 },
+  { muscle: 'browOuterUpLeft',  name: 'Violin',      emoji: '🎻', color: '#ffd93d', type: 'synth',  freq: 440,  wave: 'sine',     threshold: 0.25 },
+  { muscle: 'browOuterUpRight', name: 'Cello',       emoji: '🎻', color: '#e8a317', type: 'synth',  freq: 220,  wave: 'sine',     threshold: 0.25 },
+  { muscle: 'eyeBlinkLeft',     name: 'Hi-Hat',      emoji: '🥁', color: '#6bcb77', type: 'noise',  freq: 0,    wave: 'square',   threshold: 0.45 },
+  { muscle: 'eyeBlinkRight',    name: 'Snare',       emoji: '🪘', color: '#4ecdc4', type: 'noise',  freq: 200,  wave: 'triangle', threshold: 0.45 },
+  { muscle: 'cheekPuff',        name: 'Bass Drum',   emoji: '🥁', color: '#4d96ff', type: 'kick',   freq: 60,   wave: 'sine',     threshold: 0.3  },
+  { muscle: 'jawOpen',          name: 'Choir',       emoji: '🎤', color: '#a855f7', type: 'synth',  freq: 330,  wave: 'triangle', threshold: 0.25 },
+  { muscle: 'mouthPucker',      name: 'Flute',       emoji: '🪈', color: '#f472b6', type: 'synth',  freq: 660,  wave: 'sine',     threshold: 0.3  },
+];
+
+// Full blendshape list for the 52-channel visualizer
+const ALL_BLENDSHAPES = [
+  '_neutral','browDownLeft','browDownRight','browInnerUp','browOuterUpLeft','browOuterUpRight',
+  'cheekPuff','cheekSquintLeft','cheekSquintRight','eyeBlinkLeft','eyeBlinkRight',
+  'eyeLookDownLeft','eyeLookDownRight','eyeLookInLeft','eyeLookInRight',
+  'eyeLookOutLeft','eyeLookOutRight','eyeLookUpLeft','eyeLookUpRight',
+  'eyeSquintLeft','eyeSquintRight','eyeWideLeft','eyeWideRight',
+  'jawForward','jawLeft','jawOpen','jawRight',
+  'mouthClose','mouthDimpleLeft','mouthDimpleRight','mouthFrownLeft','mouthFrownRight',
+  'mouthFunnel','mouthLeft','mouthLowerDownLeft','mouthLowerDownRight',
+  'mouthPressLeft','mouthPressRight','mouthPucker','mouthRight',
+  'mouthRollLower','mouthRollUpper','mouthShrugLower','mouthShrugUpper',
+  'mouthSmileLeft','mouthSmileRight','mouthStretchLeft','mouthStretchRight',
+  'mouthUpperUpLeft','mouthUpperUpRight','noseSneerLeft','noseSneerRight'
+];
+
+// ============================================================
+// SONGS
+// ============================================================
+const SONGS = [
+  {
+    title: 'First Light',
+    artist: 'Tutorial',
+    difficulty: 'easy',
+    bpm: 80,
+    notes: generateTutorialSong()
+  },
+  {
+    title: 'Brow Beats',
+    artist: 'The Eyebrows',
+    difficulty: 'easy',
+    bpm: 100,
+    notes: generateBrowBeats()
+  },
+  {
+    title: 'Full Face Fury',
+    artist: 'All Muscles',
+    difficulty: 'medium',
+    bpm: 120,
+    notes: generateFullFace()
+  },
+  {
+    title: 'Muscle Memory',
+    artist: 'Speed Run',
+    difficulty: 'hard',
+    bpm: 140,
+    notes: generateHardSong()
+  }
+];
+
+function generateTutorialSong() {
+  const notes = [];
+  let t = 2;
+  // Introduce each instrument one at a time
+  for (let i = 0; i < 4; i++) {
+    notes.push({ time: t, lane: i, duration: 1.5 });
+    t += 2.5;
+  }
+  // Simple alternating pattern
+  for (let rep = 0; rep < 4; rep++) {
+    notes.push({ time: t, lane: 0, duration: 0.8 });
+    t += 1.2;
+    notes.push({ time: t, lane: 6, duration: 0.8 });
+    t += 1.2;
+  }
+  return notes;
+}
+
+function generateBrowBeats() {
+  const notes = [];
+  let t = 1;
+  for (let bar = 0; bar < 8; bar++) {
+    const beatLen = 0.5;
+    // Kick on 1 and 3
+    notes.push({ time: t, lane: 5, duration: 0.3 });
+    notes.push({ time: t + beatLen * 2, lane: 5, duration: 0.3 });
+    // Hi-hat on every beat
+    for (let b = 0; b < 4; b++) {
+      notes.push({ time: t + beatLen * b, lane: 3, duration: 0.15 });
+    }
+    // Melody: alternating brows
+    if (bar % 2 === 0) {
+      notes.push({ time: t + beatLen, lane: 1, duration: 0.6 });
+      notes.push({ time: t + beatLen * 3, lane: 2, duration: 0.6 });
+    } else {
+      notes.push({ time: t, lane: 0, duration: 1.0 });
+      notes.push({ time: t + beatLen * 2, lane: 6, duration: 0.8 });
+    }
+    t += beatLen * 4;
+  }
+  return notes;
+}
+
+function generateFullFace() {
+  const notes = [];
+  let t = 0.5;
+  const beat = 0.5;
+  for (let bar = 0; bar < 12; bar++) {
+    // Rhythm section
+    notes.push({ time: t, lane: 5, duration: 0.2 });
+    notes.push({ time: t + beat * 2, lane: 5, duration: 0.2 });
+    notes.push({ time: t + beat, lane: 4, duration: 0.15 });
+    notes.push({ time: t + beat * 3, lane: 4, duration: 0.15 });
+    for (let b = 0; b < 4; b++) {
+      notes.push({ time: t + beat * b + beat/2, lane: 3, duration: 0.1 });
+    }
+    // Melody uses all instruments
+    const melodyLane = [0,1,2,6,7,1,0,2,7,6,1,0][bar];
+    const melodyStart = beat * [0,1,0,2,1,0,1,0,2,0,1,2][bar];
+    notes.push({ time: t + melodyStart, lane: melodyLane, duration: 0.8 });
+    if (bar % 3 === 0) {
+      notes.push({ time: t + beat * 2, lane: (melodyLane + 3) % 8, duration: 0.6 });
+    }
+    t += beat * 4;
+  }
+  return notes;
+}
+
+function generateHardSong() {
+  const notes = [];
+  let t = 0.3;
+  const beat = 60 / 140;
+  for (let bar = 0; bar < 16; bar++) {
+    // Dense rhythm
+    for (let b = 0; b < 4; b++) {
+      notes.push({ time: t + beat * b, lane: 3, duration: 0.08 });
+      if (b % 2 === 0) notes.push({ time: t + beat * b, lane: 5, duration: 0.15 });
+      if (b === 1 || b === 3) notes.push({ time: t + beat * b, lane: 4, duration: 0.1 });
+    }
+    // Fast melody
+    const pattern = [[0,1],[6,7],[2,0],[1,7],[0,6],[7,2],[1,0],[2,6],
+                     [0,7],[1,6],[7,0],[2,1],[6,2],[0,1],[7,6],[1,2]][bar];
+    notes.push({ time: t, lane: pattern[0], duration: 0.5 });
+    notes.push({ time: t + beat * 2, lane: pattern[1], duration: 0.5 });
+    // Extra notes on hard
+    if (bar % 2 === 1) {
+      notes.push({ time: t + beat, lane: (pattern[0] + 4) % 8, duration: 0.3 });
+      notes.push({ time: t + beat * 3, lane: (pattern[1] + 4) % 8, duration: 0.3 });
+    }
+    t += beat * 4;
+  }
+  return notes;
+}
+
+// ============================================================
+// AUDIO ENGINE
+// ============================================================
+let audioCtx = null;
+const activeOscillators = {};
+const instrumentGains = {};
+
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const master = audioCtx.createGain();
+  master.gain.value = 0.3;
+  master.connect(audioCtx.destination);
+
+  INSTRUMENTS.forEach((inst, i) => {
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    gain.connect(master);
+    instrumentGains[i] = gain;
+  });
+}
+
+function playInstrument(index, intensity) {
+  if (!audioCtx) return;
+  const inst = INSTRUMENTS[index];
+  const gain = instrumentGains[index];
+
+  if (inst.type === 'synth') {
+    if (!activeOscillators[index]) {
+      const osc = audioCtx.createOscillator();
+      osc.type = inst.wave;
+      osc.frequency.value = inst.freq;
+      osc.connect(gain);
+      osc.start();
+      activeOscillators[index] = osc;
+    }
+    // Map intensity to volume and slight pitch bend
+    const vol = Math.min(intensity * 1.5, 1.0);
+    gain.gain.setTargetAtTime(vol * 0.4, audioCtx.currentTime, 0.05);
+    activeOscillators[index].frequency.setTargetAtTime(
+      inst.freq * (1 + (intensity - 0.5) * 0.05),
+      audioCtx.currentTime, 0.05
+    );
+  } else if (inst.type === 'noise' || inst.type === 'kick') {
+    // Percussive: trigger on threshold cross
+    if (!activeOscillators[index + '_cooldown']) {
+      activeOscillators[index + '_cooldown'] = true;
+      triggerPercussion(index, inst, intensity);
+      setTimeout(() => { activeOscillators[index + '_cooldown'] = false; }, 100);
+    }
+  }
+}
+
+function stopInstrument(index) {
+  if (!audioCtx) return;
+  const gain = instrumentGains[index];
+  if (gain) gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08);
+}
+
+function triggerPercussion(index, inst, intensity) {
+  if (!audioCtx) return;
+  if (inst.type === 'kick') {
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.15);
+    g.gain.setValueAtTime(0.6 * intensity, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+    osc.connect(g).connect(instrumentGains[index]);
+    instrumentGains[index].gain.value = 1;
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.3);
+  } else {
+    // Noise burst (hi-hat / snare)
+    const bufferSize = audioCtx.sampleRate * 0.08;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    const g = audioCtx.createGain();
+    const dur = inst.name === 'Hi-Hat' ? 0.05 : 0.12;
+    g.gain.setValueAtTime(0.4 * intensity, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    // Bandpass for hi-hat
+    if (inst.name === 'Hi-Hat') {
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'highpass';
+      bp.frequency.value = 7000;
+      source.connect(bp).connect(g).connect(instrumentGains[index]);
+    } else {
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 3000;
+      bp.Q.value = 1;
+      source.connect(bp).connect(g).connect(instrumentGains[index]);
+    }
+    instrumentGains[index].gain.value = 1;
+    source.start();
+    source.stop(audioCtx.currentTime + dur + 0.01);
+  }
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let faceLandmarker = null;
+let webcamStream = null;
+let currentMode = 'freeplay';
+let currentSong = null;
+let songStartTime = 0;
+let songPlaying = false;
+let score = 0;
+let combo = 0;
+let maxCombo = 0;
+let totalHits = 0;
+let totalNotes = 0;
+let blendshapeValues = {};
+let prevBlendshapeAboveThreshold = {};
+let animFrame = null;
+
+// Highway canvas
+let highwayCanvas, highwayCtx;
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+window.startGame = async function() {
+  document.getElementById('title-screen').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('loading-screen').style.display = 'flex';
+  }, 500);
+
+  initAudio();
+  buildInstrumentPanel();
+  buildMuscleMeters();
+
+  try {
+    // Start webcam
+    document.getElementById('loading-text').textContent = 'Accessing camera...';
+    document.getElementById('loading-fill').style.width = '20%';
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: 'user' }
+    });
+    document.getElementById('webcam').srcObject = webcamStream;
+    await new Promise(r => document.getElementById('webcam').onloadedmetadata = r);
+
+    // Load MediaPipe
+    document.getElementById('loading-text').textContent = 'Loading face model...';
+    document.getElementById('loading-fill').style.width = '50%';
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+    );
+
+    document.getElementById('loading-fill').style.width = '80%';
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: false,
+      numFaces: 1,
+      runningMode: "VIDEO"
+    });
+
+    document.getElementById('loading-fill').style.width = '100%';
+    document.getElementById('loading-text').textContent = 'Ready!';
+
+    setTimeout(() => {
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      setupHighway();
+      setMode('freeplay');
+      detectLoop();
+    }, 300);
+
+  } catch (err) {
+    document.getElementById('loading-text').textContent = 'Error: ' + err.message;
+    console.error(err);
+  }
+};
+
+function buildInstrumentPanel() {
+  const panel = document.getElementById('instruments-panel');
+  INSTRUMENTS.forEach((inst, i) => {
+    const lane = document.createElement('div');
+    lane.className = 'instrument-lane';
+    lane.id = 'lane-' + i;
+    lane.innerHTML = `
+      <div class="emoji">${inst.emoji}</div>
+      <div class="name" style="color:${inst.color}">${inst.name}</div>
+      <div class="muscle-name">${inst.muscle}</div>
+      <div class="hit-zone" id="hit-zone-${i}"></div>
+    `;
+    panel.appendChild(lane);
+  });
+}
+
+function buildMuscleMeters() {
+  const container = document.getElementById('muscle-meters');
+  const colors = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#a855f7','#f472b6','#4ecdc4','#e8a317'];
+  ALL_BLENDSHAPES.forEach((name, i) => {
+    if (name === '_neutral') return;
+    const isActive = INSTRUMENTS.some(inst => inst.muscle === name);
+    const meter = document.createElement('div');
+    meter.className = 'muscle-meter';
+    meter.id = 'meter-' + name;
+    const fill = document.createElement('div');
+    fill.className = 'muscle-meter-fill';
+    fill.style.background = isActive ? colors[INSTRUMENTS.findIndex(inst => inst.muscle === name) % colors.length] : '#333';
+    fill.id = 'meter-fill-' + name;
+    const label = document.createElement('div');
+    label.className = 'muscle-meter-label';
+    label.textContent = name.replace(/([A-Z])/g, ' $1').trim().substring(0, 12);
+    meter.appendChild(label);
+    meter.appendChild(fill);
+    container.appendChild(meter);
+  });
+}
+
+function setupHighway() {
+  highwayCanvas = document.getElementById('highway');
+  highwayCtx = highwayCanvas.getContext('2d');
+  resizeHighway();
+  window.addEventListener('resize', resizeHighway);
+}
+
+function resizeHighway() {
+  const rect = highwayCanvas.parentElement.getBoundingClientRect();
+  highwayCanvas.width = rect.width;
+  highwayCanvas.height = rect.height - 120 - 50; // minus instruments panel and mode bar
+}
+
+// ============================================================
+// DETECTION LOOP
+// ============================================================
+
+function detectLoop() {
+  const video = document.getElementById('webcam');
+  if (video.readyState >= 2 && faceLandmarker) {
+    const results = faceLandmarker.detectForVideo(video, performance.now());
+    if (results.faceBlendshapes && results.faceBlendshapes.length > 0) {
+      processBlendshapes(results.faceBlendshapes[0].categories);
+    }
+  }
+  renderHighway();
+  animFrame = requestAnimationFrame(detectLoop);
+}
+
+function processBlendshapes(categories) {
+  // Update all blendshape values
+  categories.forEach(cat => {
+    blendshapeValues[cat.categoryName] = cat.score;
+    // Update meter
+    const fill = document.getElementById('meter-fill-' + cat.categoryName);
+    if (fill) fill.style.width = (cat.score * 100) + '%';
+  });
+
+  // Process each instrument
+  INSTRUMENTS.forEach((inst, i) => {
+    const val = blendshapeValues[inst.muscle] || 0;
+    const lane = document.getElementById('lane-' + i);
+    const wasAbove = prevBlendshapeAboveThreshold[i] || false;
+    const isAbove = val > inst.threshold;
+
+    if (isAbove) {
+      lane.classList.add('active');
+      lane.style.borderBottom = `3px solid ${inst.color}`;
+      if (inst.type === 'synth') {
+        playInstrument(i, val);
+      } else if (!wasAbove) {
+        // Percussive: trigger on crossing threshold
+        playInstrument(i, val);
+      }
+
+      // Song mode hit detection
+      if (songPlaying && !wasAbove) {
+        checkHit(i);
+      }
+    } else {
+      lane.classList.remove('active');
+      lane.style.borderBottom = '3px solid transparent';
+      if (inst.type === 'synth') {
+        stopInstrument(i);
+      }
+    }
+    prevBlendshapeAboveThreshold[i] = isAbove;
+  });
+}
+
+// ============================================================
+// SONG MODE
+// ============================================================
+
+function checkHit(laneIndex) {
+  if (!currentSong) return;
+  const elapsed = (performance.now() - songStartTime) / 1000;
+  const hitWindow = 0.3; // seconds
+
+  for (let i = 0; i < currentSong.notes.length; i++) {
+    const note = currentSong.notes[i];
+    if (note.hit || note.missed) continue;
+    if (note.lane !== laneIndex) continue;
+    const diff = Math.abs(elapsed - note.time);
+    if (diff < hitWindow) {
+      note.hit = true;
+      totalHits++;
+      combo++;
+      if (combo > maxCombo) maxCombo = combo;
+      const points = diff < 0.1 ? 100 : diff < 0.2 ? 50 : 25;
+      score += points * (1 + Math.floor(combo / 10) * 0.5);
+      updateScore();
+      showHitFeedback(laneIndex, diff < 0.1 ? 'PERFECT' : diff < 0.2 ? 'GREAT' : 'OK', diff < 0.1 ? '#ffd93d' : diff < 0.2 ? '#6bcb77' : '#4d96ff');
+      const hz = document.getElementById('hit-zone-' + laneIndex);
+      hz.classList.add('hit');
+      setTimeout(() => hz.classList.remove('hit'), 200);
+      return;
+    }
+  }
+  // Miss
+  combo = 0;
+  updateScore();
+}
+
+function showHitFeedback(lane, text, color) {
+  const panel = document.getElementById('instruments-panel');
+  const laneEl = document.getElementById('lane-' + lane);
+  const rect = laneEl.getBoundingClientRect();
+  const fb = document.createElement('div');
+  fb.className = 'hit-feedback';
+  fb.textContent = text;
+  fb.style.color = color;
+  fb.style.left = (rect.left + rect.width/2 - 30) + 'px';
+  fb.style.top = (rect.top - 40) + 'px';
+  document.body.appendChild(fb);
+  setTimeout(() => fb.remove(), 800);
+}
+
+function updateScore() {
+  document.getElementById('score-display').textContent = Math.floor(score);
+  document.getElementById('combo-display').textContent = combo > 1 ? combo + 'x COMBO' : '';
+}
+
+// ============================================================
+// HIGHWAY RENDERER
+// ============================================================
+
+function renderHighway() {
+  if (!highwayCtx) return;
+  const w = highwayCanvas.width;
+  const h = highwayCanvas.height;
+  highwayCtx.clearRect(0, 0, w, h);
+
+  if (currentMode === 'freeplay') {
+    renderFreeplayVisualizer(w, h);
+    return;
+  }
+
+  if (!songPlaying || !currentSong) return;
+
+  const elapsed = (performance.now() - songStartTime) / 1000;
+  const lookAhead = 4; // seconds visible ahead
+  const laneWidth = w / 8;
+
+  // Draw lane lines
+  highwayCtx.strokeStyle = '#1a1a2a';
+  highwayCtx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    highwayCtx.beginPath();
+    highwayCtx.moveTo(i * laneWidth, 0);
+    highwayCtx.lineTo(i * laneWidth, h);
+    highwayCtx.stroke();
+  }
+
+  // Draw hit line at bottom
+  const hitLineY = h - 10;
+  highwayCtx.strokeStyle = '#333';
+  highwayCtx.lineWidth = 2;
+  highwayCtx.beginPath();
+  highwayCtx.moveTo(0, hitLineY);
+  highwayCtx.lineTo(w, hitLineY);
+  highwayCtx.stroke();
+
+  // Draw notes
+  let allDone = true;
+  currentSong.notes.forEach(note => {
+    const timeUntil = note.time - elapsed;
+    if (timeUntil > lookAhead) { allDone = false; return; }
+    if (timeUntil < -1) {
+      if (!note.hit && !note.missed) {
+        note.missed = true;
+        combo = 0;
+        updateScore();
+        const hz = document.getElementById('hit-zone-' + note.lane);
+        hz.classList.add('miss');
+        setTimeout(() => hz.classList.remove('miss'), 200);
+      }
+      return;
+    }
+    allDone = false;
+
+    const y = hitLineY - (timeUntil / lookAhead) * hitLineY;
+    const noteHeight = Math.max((note.duration / lookAhead) * hitLineY, 8);
+    const x = note.lane * laneWidth + 4;
+    const nw = laneWidth - 8;
+    const inst = INSTRUMENTS[note.lane];
+
+    if (note.hit) {
+      highwayCtx.globalAlpha = 0.2;
+    } else if (note.missed) {
+      highwayCtx.globalAlpha = 0.1;
+    } else {
+      highwayCtx.globalAlpha = 0.8;
+    }
+
+    // Note body
+    highwayCtx.fillStyle = inst.color;
+    highwayCtx.beginPath();
+    highwayCtx.roundRect(x, y - noteHeight, nw, noteHeight, 4);
+    highwayCtx.fill();
+
+    // Glow on approaching notes
+    if (!note.hit && !note.missed && timeUntil < 0.5) {
+      highwayCtx.shadowColor = inst.color;
+      highwayCtx.shadowBlur = 15;
+      highwayCtx.fill();
+      highwayCtx.shadowBlur = 0;
+    }
+
+    highwayCtx.globalAlpha = 1;
+  });
+
+  // Check if song is done
+  if (allDone && songPlaying) {
+    endSong();
+  }
+}
+
+function renderFreeplayVisualizer(w, h) {
+  const laneWidth = w / 8;
+  const barMaxHeight = h * 0.8;
+
+  INSTRUMENTS.forEach((inst, i) => {
+    const val = blendshapeValues[inst.muscle] || 0;
+    const barHeight = val * barMaxHeight;
+    const x = i * laneWidth;
+
+    // Background glow
+    if (val > inst.threshold) {
+      const grad = highwayCtx.createLinearGradient(x, h, x, h - barHeight);
+      grad.addColorStop(0, inst.color + '40');
+      grad.addColorStop(1, inst.color + '05');
+      highwayCtx.fillStyle = grad;
+      highwayCtx.fillRect(x + 2, h - barHeight, laneWidth - 4, barHeight);
+    }
+
+    // Bar
+    highwayCtx.fillStyle = val > inst.threshold ? inst.color : inst.color + '30';
+    highwayCtx.beginPath();
+    highwayCtx.roundRect(x + laneWidth * 0.2, h - barHeight, laneWidth * 0.6, barHeight, 3);
+    highwayCtx.fill();
+
+    // Threshold line
+    const threshY = h - inst.threshold * barMaxHeight;
+    highwayCtx.strokeStyle = inst.color + '40';
+    highwayCtx.lineWidth = 1;
+    highwayCtx.setLineDash([4, 4]);
+    highwayCtx.beginPath();
+    highwayCtx.moveTo(x + 4, threshY);
+    highwayCtx.lineTo(x + laneWidth - 4, threshY);
+    highwayCtx.stroke();
+    highwayCtx.setLineDash([]);
+
+    // Value label
+    highwayCtx.fillStyle = '#666';
+    highwayCtx.font = '10px monospace';
+    highwayCtx.textAlign = 'center';
+    highwayCtx.fillText((val * 100).toFixed(0) + '%', x + laneWidth / 2, h - barHeight - 8);
+  });
+
+  // Lane dividers
+  highwayCtx.strokeStyle = '#1a1a2a';
+  for (let i = 1; i < 8; i++) {
+    highwayCtx.beginPath();
+    highwayCtx.moveTo(i * laneWidth, 0);
+    highwayCtx.lineTo(i * laneWidth, h);
+    highwayCtx.stroke();
+  }
+}
+
+// ============================================================
+// MODE SWITCHING
+// ============================================================
+
+window.setMode = function(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && mode === 'freeplay') || (i === 1 && mode === 'song'));
+  });
+
+  if (mode === 'freeplay') {
+    songPlaying = false;
+    currentSong = null;
+    document.getElementById('score-display').style.display = 'none';
+    document.getElementById('combo-display').style.display = 'none';
+    document.getElementById('freeplay-info').style.display = 'block';
+    document.getElementById('song-select').style.display = 'none';
+  } else {
+    document.getElementById('freeplay-info').style.display = 'none';
+    showSongSelect();
+  }
+};
+
+function showSongSelect() {
+  const ss = document.getElementById('song-select');
+  ss.innerHTML = '<h2>SELECT SONG</h2>';
+  SONGS.forEach((song, i) => {
+    const card = document.createElement('div');
+    card.className = 'song-card';
+    const diffClass = song.difficulty === 'easy' ? 'diff-easy' : song.difficulty === 'medium' ? 'diff-med' : 'diff-hard';
+    card.innerHTML = `
+      <div class="song-title">${song.title}<span class="difficulty ${diffClass}">${song.difficulty.toUpperCase()}</span></div>
+      <div class="song-info">${song.artist} | ${song.bpm} BPM | ${song.notes.length} notes</div>
+    `;
+    card.onclick = () => startSong(i);
+    ss.appendChild(card);
+  });
+  const backBtn = document.createElement('button');
+  backBtn.className = 'mode-btn';
+  backBtn.textContent = 'BACK TO FREE PLAY';
+  backBtn.style.marginTop = '2rem';
+  backBtn.onclick = () => setMode('freeplay');
+  ss.appendChild(backBtn);
+  ss.style.display = 'flex';
+}
+
+function startSong(index) {
+  currentSong = JSON.parse(JSON.stringify(SONGS[index]));
+  totalNotes = currentSong.notes.length;
+  score = 0;
+  combo = 0;
+  maxCombo = 0;
+  totalHits = 0;
+  songPlaying = true;
+  songStartTime = performance.now();
+  document.getElementById('song-select').style.display = 'none';
+  document.getElementById('score-display').style.display = 'block';
+  document.getElementById('combo-display').style.display = 'block';
+  updateScore();
+}
+
+function endSong() {
+  songPlaying = false;
+  const pct = totalNotes > 0 ? (totalHits / totalNotes * 100) : 0;
+  let grade, gradeColor;
+  if (pct >= 95) { grade = 'S'; gradeColor = '#ffd93d'; }
+  else if (pct >= 85) { grade = 'A'; gradeColor = '#6bcb77'; }
+  else if (pct >= 70) { grade = 'B'; gradeColor = '#4d96ff'; }
+  else if (pct >= 50) { grade = 'C'; gradeColor = '#a855f7'; }
+  else { grade = 'D'; gradeColor = '#ff6b6b'; }
+
+  const rs = document.getElementById('results-screen');
+  rs.innerHTML = `
+    <h2>SONG COMPLETE</h2>
+    <div class="grade" style="color:${gradeColor}">${grade}</div>
+    <div class="stat">Score: <span>${Math.floor(score)}</span></div>
+    <div class="stat">Notes Hit: <span>${totalHits} / ${totalNotes} (${pct.toFixed(0)}%)</span></div>
+    <div class="stat">Max Combo: <span>${maxCombo}x</span></div>
+    <button class="mode-btn" style="margin-top:2rem" onclick="document.getElementById('results-screen').style.display='none';showSongSelect();">PLAY AGAIN</button>
+    <button class="mode-btn" style="margin-top:1rem" onclick="document.getElementById('results-screen').style.display='none';setMode('freeplay');">FREE PLAY</button>
+  `;
+  rs.style.display = 'flex';
+
+  window.showSongSelect = showSongSelect;
+}
+
+</script>
+</body>
+</html>
