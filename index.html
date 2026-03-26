@@ -230,7 +230,7 @@ body { background: #0a0a0f; color: #e0e0e0; font-family: 'Courier New', monospac
 </div>
 
 <script type="module">
-import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs";
+import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs";
 
 // ============================================================
 // INSTRUMENT DEFINITIONS
@@ -544,7 +544,7 @@ window.startGame = async function() {
     document.getElementById('loading-text').textContent = 'Loading face model...';
     document.getElementById('loading-fill').style.width = '50%';
     const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
     );
 
     document.getElementById('loading-fill').style.width = '80%';
